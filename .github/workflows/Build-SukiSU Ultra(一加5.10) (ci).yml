@@ -88,6 +88,20 @@ jobs:
           cd kernel_workspace
           LTO=thin ./kernel_platform/oplus/build/oplus_build_kernel.sh ${{ github.event.inputs.CPUD }} gki
 
+      - name: Make AnyKernel3
+        run: |
+          git clone https://github.com/Kernel-SU/AnyKernel3 --depth=1
+          rm -rf ./AnyKernel3/.git
+          if [[ "${{ inputs.CPU }}" == "sm8650" ]]; then
+            cp kernel_workspace/kernel_platform/out/msm-kernel-${{ github.event.inputs.CPUD }}-gki/dist/Image ./AnyKernel3/
+            cp kernel_workspace/kernel_platform/out/msm-kernel-${{ github.event.inputs.CPUD }}-gki/dist/boot.img ./kernel_workspace/
+            cp kernel_workspace/kernel_platform/out/msm-kernel-${{ github.event.inputs.CPUD }}-gki/dist/Image ./kernel_workspace/kernel
+          else
+            cp kernel_workspace/out/dist/Image ./AnyKernel3/
+            cp kernel_workspace/out/dist/boot.img ./kernel_workspace/
+            cp kernel_workspace/out/dist/Image ./kernel_workspace/kernel
+          fi
+             
       - name: Upload AnyKernel3
         uses: actions/upload-artifact@v4
         with:
@@ -99,19 +113,3 @@ jobs:
         with:
           name: Image_KernelSU_${{ env.KSUVER }}_${{ github.event.inputs.FEIL }}
           path: kernel_workspace/kernel
-
-      - name: Find zram module
-        if: ${{ github.event.inputs.ZRAM_AS_MODULE }}
-        run: |
-          cd kernel_workspace
-          find . -name "zram.ko" -exec cp {} ./ \;
-          [ -f zram.ko ] || exit 1
-          modinfo zram.ko
-  
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: kernel_artifacts_${{ github.event.inputs.FEIL }}
-          path: |
-            kernel_workspace/zram.ko
-          if-no-files-found: error

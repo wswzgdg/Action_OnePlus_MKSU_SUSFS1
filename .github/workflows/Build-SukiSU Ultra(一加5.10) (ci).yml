@@ -88,6 +88,18 @@ jobs:
           cd kernel_workspace
           LTO=thin ./kernel_platform/oplus/build/oplus_build_kernel.sh ${{ github.event.inputs.CPUD }} gki
 
+      - name: Upload AnyKernel3
+        uses: actions/upload-artifact@v4
+        with:
+          name: AnyKernel3_KernelSU_${{ env.KSUVER }}_${{ github.event.inputs.FEIL }}
+          path: ./AnyKernel3/*
+
+      - name: Upload Image
+        uses: actions/upload-artifact@v4
+        with:
+          name: Image_KernelSU_${{ env.KSUVER }}_${{ github.event.inputs.FEIL }}
+          path: kernel_workspace/kernel
+
       - name: Find zram module
         if: ${{ github.event.inputs.ZRAM_AS_MODULE }}
         run: |
@@ -95,13 +107,11 @@ jobs:
           find . -name "zram.ko" -exec cp {} ./ \;
           [ -f zram.ko ] || exit 1
           modinfo zram.ko
-
+  
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: kernel_artifacts_${{ github.event.inputs.FEIL }}
           path: |
-            kernel_workspace/out/dist/Image
-            kernel_workspace/out/dist/boot.img
             kernel_workspace/zram.ko
           if-no-files-found: error

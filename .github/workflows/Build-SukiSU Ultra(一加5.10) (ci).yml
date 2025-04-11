@@ -1,0 +1,107 @@
+name: Build OnePlus Kernel for Ace2 (ZRAM Fix)
+on:
+  workflow_dispatch:
+    inputs:
+      CPU:
+        description: "分支"
+        required: true
+        default: 'sm8475'
+      FEIL:
+        description: "配置文件"
+        required: true
+        default: 'oneplus_ace2_v'
+      CPUD:
+        description: "处理器代号"
+        required: true
+        default: 'waipio'
+      ANDROID_VERSION:
+        description: "内核安卓版本"
+        required: true
+        default: 'android12'
+      KERNEL_VERSION:
+        description: "内核版本"
+        required: true
+        default: '5.10'
+      KERNEL_NAME:
+        description: "修改内核名称"
+        required: true
+        default: '-OKI'
+      ZRAM_AS_MODULE:
+        description: "将 zram 编译为模块（一加设备必须启用）"
+        required: true
+        type: boolean
+        default: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Maximize build space
+        uses: easimon/maximize-build-space@master
+        with:
+          root-reserve-mb: 8192
+          temp-reserve-mb: 2048
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "Kernel Builder"
+          git config --global user.email "builder@kernel.org"
+
+      - name: Install dependencies
+        run: |
+          sudo apt update && sudo apt upgrade -y
+          sudo apt install -y python3 git curl flex bison libssl-dev bc kmod
+
+      - name: Install repo tool
+        run: |
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/repo
+          chmod a+x ~/repo
+          sudo mv ~/repo /usr/local/bin/repo
+
+      - name: Initialize repo and sync
+        run: |
+          mkdir kernel_workspace && cd kernel_workspace
+          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1
+          repo sync -j$(nproc) --force-sync --no-clone-bundle --no-tags
+          rm -f kernel_platform/common/android/abi_gki_protected_exports_*
+          rm -f kernel_platform/msm-kernel/android/abi_gki_protected_exports_*
+          sed -i 's/ -dirty//g' kernel_platform/common/scripts/setlocalversion
+          sed -i 's/ -dirty//g' kernel_platform/msm-kernel/scripts/setlocalversion
+
+      - name: Configure kernel
+        run: |
+          cd kernel_workspace/kernel_platform
+          if ${{ github.event.inputs.ZRAM_AS_MODULE }}; then
+            sed -i 's/CONFIG_ZRAM=.*/CONFIG_ZRAM=m/g' common/arch/arm64/configs/gki_defconfig
+            sed -i 's/CONFIG_ZSMALLOC=.*/CONFIG_ZSMALLOC=m/g' common/arch/arm64/configs/gki_defconfig
+          fi
+          sed -i 's/CONFIG_MODULE_SIG=.*/CONFIG_MODULE_SIG=n/g' common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_ZRAM_WRITEBACK=y" >> common/arch/arm64/configs/gki_defconfig
+          sed -i 's/check_defconfig//' common/build.config.gki
+
+      - name: Build kernel
+        run: |
+          cd kernel_workspace
+          LTO=thin ./kernel_platform/oplus/build/oplus_build_kernel.sh ${{ github.event.inputs.CPUD }} gki
+
+      - name: Find zram module
+        if: ${{ github.event.inputs.ZRAM_AS_MODULE }}
+        run: |
+          cd kernel_workspace
+          find . -name "zram.ko" -exec cp {} ./ \;
+          [ -f zram.ko ] || exit 1
+          modinfo zram.ko
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel_artifacts_${{ github.event.inputs.FEIL }}
+          path: |
+            kernel_workspace/out/dist/Image
+            kernel_workspace/out/dist/boot.img
+            kernel_workspace/zram.ko
+          if-no-files-found: error

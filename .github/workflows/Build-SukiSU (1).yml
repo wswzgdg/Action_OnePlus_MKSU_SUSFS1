@@ -247,18 +247,25 @@ jobs:
           target1="./AnyKernel3/"
           target2="./kernel_workspace/kernel"
 
+          echo "Listing contents of kernel_workspace before find:"
+          ls -R ./kernel_workspace
+
           find_output=$(find "./kernel_workspace" -name "Image")
 
+          echo "Find output: $find_output"
+
           if [ -n "$find_output" ]; then
-            # 如果找到多个 Image 文件，只取第一个
             IFS=$'\n' read -r -d '' image_path_array <<< "$find_output"
             image_path="${image_path_array[0]}"
+
+            echo "Image path found: $image_path"
 
             if [ -f "$image_path" ]; then
               mkdir -p "$(dirname "$GITHUB_WORKSPACE/AnyKernel3/Image")"
               cp "$image_path" "$GITHUB_WORKSPACE/AnyKernel3/Image"
               mkdir -p "$(dirname "$GITHUB_WORKSPACE/kernel_workspace/kernel")"
               cp "$image_path" "$GITHUB_WORKSPACE/kernel_workspace/kernel"
+              echo "Image file copied successfully."
             else
               echo "找到 Image 文件路径，但文件不存在: $image_path"
               exit 1
